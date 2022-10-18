@@ -4,7 +4,7 @@ pragma solidity >=0.8.4;
 
 import {Test} from "forge-std/Test.sol";
 
-import {AztecTypes} from "../src/aztec/libraries/AztecTypes.sol";
+import {AztecTypes} from "../src/libraries/AztecTypes.sol";
 import {RollupEncoder} from "../src/RollupEncoder.sol";
 
 contract RollupEncoderTest is RollupEncoder, Test {

@@ -3,10 +3,10 @@
 pragma solidity >=0.8.4;
 
 import {Script, Vm} from "forge-std/Script.sol";
-import {ISubsidy} from "./aztec/interfaces/ISubsidy.sol";
-import {IRollupProcessorV2} from "./aztec/interfaces/IRollupProcessorV2.sol";
-import {AztecTypes} from "./aztec/libraries/AztecTypes.sol";
-import {RollupProcessorLibrary} from "./aztec/libraries/RollupProcessorLibrary.sol";
+import {ISubsidy} from "./interfaces/ISubsidy.sol";
+import {IRollupProcessorV2} from "./interfaces/IRollupProcessorV2.sol";
+import {AztecTypes} from "./libraries/AztecTypes.sol";
+import {RollupProcessorLibrary} from "./libraries/RollupProcessorLibrary.sol";
 
 /**
  * @notice A contract which allows testing bridges against live RollupProcessor deployment.
