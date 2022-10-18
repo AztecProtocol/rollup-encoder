@@ -26,9 +26,9 @@ contract RollupEncoderTest is RollupEncoder, Test {
     }
 
     function testNonVirtual(uint32 _assetId) public {
-        uint256 assetId = bound(_assetId, 0, rollupProcessor.getSupportedAssetsLength());
+        uint256 assetId = bound(_assetId, 0, ROLLUP_PROCESSOR.getSupportedAssetsLength());
 
-        address assetAddress = rollupProcessor.getSupportedAsset(assetId);
+        address assetAddress = ROLLUP_PROCESSOR.getSupportedAsset(assetId);
 
         AztecTypes.AztecAsset memory decoded = _decodeAsset(assetId);
 
@@ -67,7 +67,7 @@ contract RollupEncoderTest is RollupEncoder, Test {
     function testRollupBeneficiaryEncoding() public {
         address beneficiary = 0x508383c4cbD351dC2d4F632C65Ee9d2BC79612EC;
         this.setRollupBeneficiary(beneficiary);
-        defiInteractionL2(5, emptyAsset, emptyAsset, emptyAsset, emptyAsset, 0, 0);
+        this.defiInteractionL2(5, emptyAsset, emptyAsset, emptyAsset, emptyAsset, 0, 0);
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
         address decodedBeneficiary = _extractRollupBeneficiary(encodedProofData);
         assertEq(decodedBeneficiary, beneficiary, "Decoded address does not match");
@@ -81,7 +81,7 @@ contract RollupEncoderTest is RollupEncoder, Test {
                 assetType: AztecTypes.AztecAssetType.VIRTUAL
             });
         } else {
-            address erc20Address = rollupProcessor.getSupportedAsset(_assetId);
+            address erc20Address = ROLLUP_PROCESSOR.getSupportedAsset(_assetId);
             return AztecTypes.AztecAsset({
                 id: _assetId,
                 erc20Address: erc20Address,

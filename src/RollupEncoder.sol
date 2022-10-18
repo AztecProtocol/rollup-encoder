@@ -161,10 +161,10 @@ contract RollupEncoder is Script {
     bool private mockVerifierCall = true;
     uint256 public nextRollupId = 0;
     address public rollupBeneficiary;
-    IRollupProcessorV2 public rollupProcessor;
+    IRollupProcessorV2 public ROLLUP_PROCESSOR;
 
     constructor(address _rollupProcessor) {
-        rollupProcessor = IRollupProcessorV2(_rollupProcessor);
+        ROLLUP_PROCESSOR = IRollupProcessorV2(_rollupProcessor);
     }
 
     /**
@@ -191,7 +191,7 @@ contract RollupEncoder is Script {
      * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
      * @dev Checks DefiBridgeProcessed events if registered via `registerEventToBeChecked(...)`
      */
-    function processRollup() public {
+    function processRollup() external {
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
 
         for (uint256 i = 0; i < defiBridgeProcessedStructsLength; i++) {
@@ -209,7 +209,7 @@ contract RollupEncoder is Script {
         }
 
         vm.prank(ROLLUP_PROVIDER);
-        rollupProcessor.processRollup(encodedProofData, signatures);
+        ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
         nextRollupId++;
     }
 
@@ -218,11 +218,11 @@ contract RollupEncoder is Script {
      * @dev Before calling this method deposits, withdrawals and defiInteractions should be registered through
      * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
      */
-    function processRollupFail(bytes memory _err) public {
+    function processRollupFail(bytes memory _err) external {
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
-        rollupProcessor.processRollup(encodedProofData, signatures);
+        ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
         nextRollupId++;
     }
 
@@ -231,11 +231,11 @@ contract RollupEncoder is Script {
      * @dev Before calling this method deposits, withdrawals and defiInteractions should be registered through
      * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
      */
-    function processRollupFail(bytes4 _err) public {
+    function processRollupFail(bytes4 _err) external {
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
-        rollupProcessor.processRollup(encodedProofData, signatures);
+        ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
         nextRollupId++;
     }
 
@@ -248,14 +248,14 @@ contract RollupEncoder is Script {
      * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
      */
     function processRollupAndGetBridgeResult()
-        public
+        external
         returns (uint256 outputValueA, uint256 outputValueB, bool isAsync)
     {
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
 
         vm.recordLogs();
         vm.prank(ROLLUP_PROVIDER);
-        rollupProcessor.processRollup(encodedProofData, signatures);
+        ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
         nextRollupId++;
 
         return _getDefiBridgeProcessedData();
@@ -270,7 +270,7 @@ contract RollupEncoder is Script {
      * @dev This is a claim on L2 on funds deposited on L1
      * @dev Note: For deposits to pass the corresponsing deposit has to be in `rollupProcessor.userPendingDeposits`.
      */
-    function depositL2(uint256 _assetId, uint256 _amount, uint256 _fee, uint256 _privKey) public {
+    function depositL2(uint256 _assetId, uint256 _amount, uint256 _fee, uint256 _privKey) external {
         depositsL2[depositsL2Length++] =
             DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, digest: bytes32("")});
 
@@ -282,7 +282,9 @@ contract RollupEncoder is Script {
         }
     }
 
-    function depositL2(uint256 _assetId, uint256 _amount, uint256 _fee, uint256 _privKey, bytes32 _proofHash) public {
+    function depositL2(uint256 _assetId, uint256 _amount, uint256 _fee, uint256 _privKey, bytes32 _proofHash)
+        external
+    {
         depositsL2[depositsL2Length++] =
             DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, digest: _proofHash});
         if (_fee > 0) {
@@ -299,7 +301,7 @@ contract RollupEncoder is Script {
      * @param _amount Amount of the deposited asset
      * @param _owner Address on L1 which will receive the withdrawn funds once the rollup is processed
      */
-    function withdrawL2(uint256 _assetId, uint256 _amount, address _owner) public {
+    function withdrawL2(uint256 _assetId, uint256 _amount, address _owner) external {
         withdrawalsL2[withdrawalsL2Length++] = WithdrawStruct({assetId: _assetId, amount: _amount, publicOwner: _owner});
     }
 
@@ -322,7 +324,7 @@ contract RollupEncoder is Script {
         AztecTypes.AztecAsset memory _outputAssetB,
         uint64 _auxData,
         uint256 _totalInputValue
-    ) public returns (uint256) {
+    ) external returns (uint256) {
         uint256 encodedBridgeCallData =
             encodeBridgeCallData(_bridgeAddressId, _inputAssetA, _inputAssetB, _outputAssetA, _outputAssetB, _auxData);
         defiInteractionsL2[defiInteractionLength++] =
@@ -335,7 +337,7 @@ contract RollupEncoder is Script {
      * @param _encodedBridgeCallData The encodedBridgeCallData for the given interaction
      * @param _totalInputValue An amount of input assets transferred to the bridge
      */
-    function defiInteractionL2(uint256 _encodedBridgeCallData, uint256 _totalInputValue) public {
+    function defiInteractionL2(uint256 _encodedBridgeCallData, uint256 _totalInputValue) external {
         defiInteractionsL2[defiInteractionLength++] =
             DefiInteractionStruct({bridgeCallData: _encodedBridgeCallData, inputValue: _totalInputValue});
     }
@@ -344,7 +346,7 @@ contract RollupEncoder is Script {
      * @notice Sets `rollupBeneficiary` storage variable
      * @param _rollupBeneficiary An address which receives rollup block's fee
      */
-    function setRollupBeneficiary(address _rollupBeneficiary) public {
+    function setRollupBeneficiary(address _rollupBeneficiary) external {
         rollupBeneficiary = _rollupBeneficiary;
     }
 
@@ -353,7 +355,7 @@ contract RollupEncoder is Script {
      * @param _mockVerifierCall A flag specifying whether a call to verifier should be mocked
      * @dev Used in NoCode.t.sol
      */
-    function setMockVerifierCall(bool _mockVerifierCall) public {
+    function setMockVerifierCall(bool _mockVerifierCall) external {
         mockVerifierCall = _mockVerifierCall;
     }
 
@@ -364,7 +366,7 @@ contract RollupEncoder is Script {
      * @param _asset The address of the asset to fetch
      * @return A populated supported `AztecAsset`
      */
-    function getRealAztecAsset(address _asset) public view returns (AztecTypes.AztecAsset memory) {
+    function getRealAztecAsset(address _asset) external view returns (AztecTypes.AztecAsset memory) {
         if (_asset == address(0)) {
             return AztecTypes.AztecAsset({id: 0, erc20Address: address(0), assetType: AztecTypes.AztecAssetType.ETH});
         } else {
@@ -380,8 +382,81 @@ contract RollupEncoder is Script {
      * @notice Helper function to fetch nonce for the next interaction
      * @return The nonce of the next DeFi interaction
      */
-    function getNextNonce() public view returns (uint256) {
+    function getNextNonce() external view returns (uint256) {
         return nextRollupId * 32;
+    }
+
+    /**
+     * @notice Helper function to get the id a given `_asset`
+     * @dev if `_asset` is not supported will revert with `UnsupportedAsset(_asset)`
+     * @param _asset The address of the asset to fetch id for
+     * @return The id matching `_asset`
+     */
+    function tokenToId(address _asset) external view returns (uint256) {
+        if (_asset == address(0)) {
+            return 0;
+        }
+        uint256 length = ROLLUP_PROCESSOR.getSupportedAssetsLength();
+        for (uint256 i = 1; i <= length; i++) {
+            address fetched = ROLLUP_PROCESSOR.getSupportedAsset(i);
+            if (fetched == _asset) {
+                return i;
+            }
+        }
+        revert UnsupportedAsset(_asset);
+    }
+
+    /**
+     * @notice Helper function to check if `_asset` is supported or not
+     * @param _asset The address of the asset
+     * @return True if the asset is supported, false otherwise
+     */
+    function isSupportedAsset(address _asset) external view returns (bool) {
+        if (_asset == address(0)) {
+            return true;
+        }
+        uint256 length = ROLLUP_PROCESSOR.getSupportedAssetsLength();
+        for (uint256 i = 1; i <= length; i++) {
+            address fetched = ROLLUP_PROCESSOR.getSupportedAsset(i);
+            if (fetched == _asset) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @notice A helper function used to compute defiInteractionHash
+     * @param _encodedBridgeCallData The encodedBridgeCallData of the given interaction
+     * @param _interactionNonce Nonce of the interaction
+     * @param _totalInputValue An amount of input assets transferred to the bridge
+     * @param _outputValueA An amount of `_outputAssetA` returned from this interaction
+     * @param _outputValueB An amount of `_outputAssetB` returned from this interaction
+     * @param _success A flag indicating whether the interaction succeeded
+     * @return defiInteractionHash of a given interaction
+     */
+    function computeDefiInteractionHash(
+        uint256 _encodedBridgeCallData,
+        uint256 _interactionNonce,
+        uint256 _totalInputValue,
+        uint256 _outputValueA,
+        uint256 _outputValueB,
+        bool _success
+    ) external pure returns (bytes32) {
+        return bytes32(
+            uint256(
+                sha256(
+                    abi.encode(
+                        _encodedBridgeCallData,
+                        _interactionNonce,
+                        _totalInputValue,
+                        _outputValueA,
+                        _outputValueB,
+                        _success
+                    )
+                )
+            ) % CIRCUIT_MODULUS
+        );
     }
 
     /**
@@ -394,9 +469,9 @@ contract RollupEncoder is Script {
         if (_asset == address(0)) {
             return 0;
         }
-        uint256 length = rollupProcessor.getSupportedAssetsLength();
+        uint256 length = ROLLUP_PROCESSOR.getSupportedAssetsLength();
         for (uint256 i = 1; i <= length; i++) {
-            address fetched = rollupProcessor.getSupportedAsset(i);
+            address fetched = ROLLUP_PROCESSOR.getSupportedAsset(i);
             if (fetched == _asset) {
                 return i;
             }
@@ -440,40 +515,6 @@ contract RollupEncoder is Script {
         encodedBridgeCallData = encodedBridgeCallData | (bitConfig << BITCONFIG_SHIFT);
     }
 
-    /**
-     * @notice A helper function used to compute defiInteractionHash
-     * @param _encodedBridgeCallData The encodedBridgeCallData of the given interaction
-     * @param _interactionNonce Nonce of the interaction
-     * @param _totalInputValue An amount of input assets transferred to the bridge
-     * @param _outputValueA An amount of `_outputAssetA` returned from this interaction
-     * @param _outputValueB An amount of `_outputAssetB` returned from this interaction
-     * @param _success A flag indicating whether the interaction succeeded
-     * @return defiInteractionHash of a given interaction
-     */
-    function computeDefiInteractionHash(
-        uint256 _encodedBridgeCallData,
-        uint256 _interactionNonce,
-        uint256 _totalInputValue,
-        uint256 _outputValueA,
-        uint256 _outputValueB,
-        bool _success
-    ) public pure returns (bytes32) {
-        return bytes32(
-            uint256(
-                sha256(
-                    abi.encode(
-                        _encodedBridgeCallData,
-                        _interactionNonce,
-                        _totalInputValue,
-                        _outputValueA,
-                        _outputValueB,
-                        _success
-                    )
-                )
-            ) % CIRCUIT_MODULUS
-        );
-    }
-
     function _computeRollup() internal returns (bytes memory pd, bytes memory signatures) {
         _prepRollup();
 
@@ -486,7 +527,7 @@ contract RollupEncoder is Script {
         {
             uint256 _nextRollupId = nextRollupId;
             uint256 numDataLeaves = numRealTxs * 2;
-            uint256 dataSize = rollupProcessor.getDataSize();
+            uint256 dataSize = ROLLUP_PROCESSOR.getDataSize();
 
             uint256 newDataStartIndex =
                 (dataSize % numDataLeaves == 0) ? dataSize : (dataSize + numDataLeaves - (dataSize % numDataLeaves));
@@ -537,13 +578,13 @@ contract RollupEncoder is Script {
 
         {
             // Interaction notes. For mock, ignore any proofs related to this
-            uint256 defiInteractionLength_ = rollupProcessor.getDefiInteractionHashesLength();
+            uint256 defiInteractionLength_ = ROLLUP_PROCESSOR.getDefiInteractionHashesLength();
             uint256 numPending = 32 > defiInteractionLength_ ? defiInteractionLength_ : 32;
             uint256 offset = defiInteractionLength_ - numPending;
             for (uint256 i = 0; i < 32; i++) {
                 if (offset + i < defiInteractionLength_) {
                     {
-                        bytes32 hash = rollupProcessor.defiInteractionHashes(offset + i);
+                        bytes32 hash = ROLLUP_PROCESSOR.defiInteractionHashes(offset + i);
                         assembly {
                             mstore(add(pd, add(0x20, mul(0x20, add(107, i)))), hash)
                         }
@@ -560,11 +601,11 @@ contract RollupEncoder is Script {
                 pop(staticcall(gas(), 0x2, hashData, 1024, 0x00, 0x20))
                 prevDefiInteractionsHash := mod(mload(0x00), CIRCUIT_MODULUS)
             }
-            vm.store(address(rollupProcessor), bytes32(uint256(16)), prevDefiInteractionsHash);
+            vm.store(address(ROLLUP_PROCESSOR), bytes32(uint256(16)), prevDefiInteractionsHash);
         }
 
         {
-            bytes32 prev = rollupProcessor.prevDefiInteractionsHash();
+            bytes32 prev = ROLLUP_PROCESSOR.prevDefiInteractionsHash();
             address rollupBeneficiaryUnpacked = rollupBeneficiary;
             assembly {
                 mstore(add(pd, add(0x20, mul(0x20, 139))), prev)
@@ -649,17 +690,17 @@ contract RollupEncoder is Script {
                     0x2e4ab7889ab3139204945f9e722c7a8fdb84e66439d787bd066c3d896dba04ea
                 )
             );
-            vm.store(address(rollupProcessor), bytes32(uint256(9)), rollupStateHash);
+            vm.store(address(ROLLUP_PROCESSOR), bytes32(uint256(9)), rollupStateHash);
         }
 
         if (nextRollupId == 0) {
             // Overwrite the rollup state to zero (only verifier address)
             vm.store(
-                address(rollupProcessor), bytes32(uint256(2)), bytes32(uint256(uint160(rollupProcessor.verifier())))
+                address(ROLLUP_PROCESSOR), bytes32(uint256(2)), bytes32(uint256(uint160(ROLLUP_PROCESSOR.verifier())))
             );
         }
         if (mockVerifierCall) {
-            vm.mockCall(rollupProcessor.verifier(), "", abi.encode(true));
+            vm.mockCall(ROLLUP_PROCESSOR.verifier(), "", abi.encode(true));
         }
     }
 
