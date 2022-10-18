@@ -13,7 +13,7 @@ contract RollupEncoderTest is RollupEncoder, Test {
 
     AztecTypes.AztecAsset internal emptyAsset;
 
-    constructor() RollupEncoder(address(0)) {}
+    constructor() RollupEncoder(0xFF1F2B4ADb9dF6FC8eAFecDcbF96A2B351680455) {}
 
     function testVirtualAssetFlagApplied(uint32 _assetId) public {
         uint256 assetId = bound(_assetId, 0, VIRTUAL_ASSET_ID_FLAG - 1);

@@ -553,9 +553,10 @@ contract RollupEncoder is Script {
 
         {
             bytes32 prev = rollupProcessor.prevDefiInteractionsHash();
+            address rollupBeneficiaryUnpacked = rollupBeneficiary;
             assembly {
                 mstore(add(pd, add(0x20, mul(0x20, 139))), prev)
-                mstore(add(pd, add(0x20, mul(0x20, 140))), sload(rollupBeneficiary.slot))
+                mstore(add(pd, add(0x20, mul(0x20, 140))), rollupBeneficiaryUnpacked)
             }
         }
 
