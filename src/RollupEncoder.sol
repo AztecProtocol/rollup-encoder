@@ -8,10 +8,6 @@ import {IRollupProcessorV2} from "./aztec/interfaces/IRollupProcessorV2.sol";
 import {AztecTypes} from "./aztec/libraries/AztecTypes.sol";
 import {RollupProcessorLibrary} from "./aztec/libraries/RollupProcessorLibrary.sol";
 
-interface Helper {
-    function defiInteractionHashes(uint256) external view returns (bytes32);
-}
-
 /**
  * @notice A contract which allows testing bridges against live RollupProcessor deployment.
  * @author Lasse Herskind, Jan Benes
@@ -531,7 +527,7 @@ contract RollupEncoder is Script {
             for (uint256 i = 0; i < 32; i++) {
                 if (offset + i < defiInteractionLength_) {
                     {
-                        bytes32 hash = Helper(address(rollupProcessor)).defiInteractionHashes(offset + i);
+                        bytes32 hash = rollupProcessor.defiInteractionHashes(offset + i);
                         assembly {
                             mstore(add(pd, add(0x20, mul(0x20, add(107, i)))), hash)
                         }
