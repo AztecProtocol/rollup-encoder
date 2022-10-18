@@ -3,7 +3,6 @@
 pragma solidity >=0.8.4;
 
 import {Script, Vm} from "forge-std/Script.sol";
-import {ISubsidy} from "./interfaces/ISubsidy.sol";
 import {IRollupProcessorV2} from "./interfaces/IRollupProcessorV2.sol";
 import {AztecTypes} from "./libraries/AztecTypes.sol";
 import {RollupProcessorLibrary} from "./libraries/RollupProcessorLibrary.sol";
@@ -97,7 +96,7 @@ contract RollupEncoder is Script {
     }
 
     struct DefiBridgeProcessedStruct {
-        uint256 encodedBridgeCallData;
+        uint256 bridgeCallData;
         uint256 nonce;
         uint256 totalInputValue;
         uint256 totalOutputValueA;
@@ -147,12 +146,14 @@ contract RollupEncoder is Script {
     mapping(uint256 => DepositStruct) private depositsL2;
     mapping(uint256 => WithdrawStruct) private withdrawalsL2;
     mapping(uint256 => DefiInteractionStruct) private defiInteractionsL2;
+    mapping(uint256 => DefiBridgeProcessedStruct) private defiBridgeProcessedStructs;
     // assetId => fee amount
     mapping(uint256 => uint256) private fees;
 
     uint256 public depositsL2Length;
     uint256 public withdrawalsL2Length;
     uint256 public defiInteractionLength;
+    uint256 public defiBridgeProcessedStructsLength;
 
     // @dev Placing `mockVerifierCall` next to `rollupBeneficiary` would cause revert in a Decoder because these 2
     //      variables would get packed to 1 slot and then the boolean value would get accidentally saved to the proof
@@ -167,12 +168,46 @@ contract RollupEncoder is Script {
     }
 
     /**
+     * @notice Saves contents of DefiBridgeProcessed event to be later checked in `processRollup(...)`
+     * @dev The array gets cleaned up after rollup is processed
+     */
+    function registerEventToBeChecked(
+        uint256 bridgeCallData,
+        uint256 nonce,
+        uint256 totalInputValue,
+        uint256 totalOutputValueA,
+        uint256 totalOutputValueB,
+        bool result,
+        bytes memory errorReason
+    ) external {
+        defiBridgeProcessedStructs[defiBridgeProcessedStructsLength++] = DefiBridgeProcessedStruct(
+            bridgeCallData, nonce, totalInputValue, totalOutputValueA, totalOutputValueB, result, errorReason
+        );
+    }
+
+    /**
      * @notice A function used to construct and submit rollup batch to `rollupProcessor`
      * @dev Before calling this method deposits, withdrawals and defiInteractions should be registered through
      * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
+     * @dev Checks DefiBridgeProcessed events if registered via `registerEventToBeChecked(...)`
      */
     function processRollup() public {
         (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
+
+        for (uint256 i = 0; i < defiBridgeProcessedStructsLength; i++) {
+            DefiBridgeProcessedStruct memory temp = defiBridgeProcessedStructs[i];
+            vm.expectEmit(true, true, false, true);
+            emit DefiBridgeProcessed(
+                temp.bridgeCallData,
+                temp.nonce,
+                temp.totalInputValue,
+                temp.totalOutputValueA,
+                temp.totalOutputValueB,
+                temp.result,
+                temp.errorReason
+                );
+        }
+
         vm.prank(ROLLUP_PROVIDER);
         rollupProcessor.processRollup(encodedProofData, signatures);
         nextRollupId++;
@@ -224,33 +259,6 @@ contract RollupEncoder is Script {
         nextRollupId++;
 
         return _getDefiBridgeProcessedData();
-    }
-
-    /**
-     * @notice A function used to construct and submit a rollup batch with asserts for the events emitted
-     * @dev Before calling this method deposits, withdrawals and defiInteractions should be registered through
-     * `depositL2(...)`, `withdrawL2(...)`, `defiInteractionL2(...)` functions.
-     */
-    function processRollupCheckEvents(DefiBridgeProcessedStruct[] memory _events) public {
-        (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
-
-        for (uint256 i = 0; i < _events.length; i++) {
-            DefiBridgeProcessedStruct memory temp = _events[i];
-            vm.expectEmit(true, true, false, true);
-            emit DefiBridgeProcessed(
-                temp.encodedBridgeCallData,
-                temp.nonce,
-                temp.totalInputValue,
-                temp.totalOutputValueA,
-                temp.totalOutputValueB,
-                temp.result,
-                temp.errorReason
-                );
-        }
-
-        vm.prank(ROLLUP_PROVIDER);
-        rollupProcessor.processRollup(encodedProofData, signatures);
-        nextRollupId++;
     }
 
     /**
@@ -366,6 +374,14 @@ contract RollupEncoder is Script {
                 assetType: AztecTypes.AztecAssetType.ERC20
             });
         }
+    }
+
+    /**
+     * @notice Helper function to fetch nonce for the next interaction
+     * @return The nonce of the next DeFi interaction
+     */
+    function getNextNonce() public view returns (uint256) {
+        return nextRollupId * 32;
     }
 
     /**
@@ -582,8 +598,6 @@ contract RollupEncoder is Script {
             }
         }
 
-        depositsL2Length = withdrawalsL2Length = defiInteractionLength = 0;
-
         {
             uint256 proofSize = proofLoc - 0x20;
             uint256 sigSize = sigIndex - 0x20;
@@ -592,6 +606,8 @@ contract RollupEncoder is Script {
                 mstore(signatures, sigSize)
             }
         }
+
+        depositsL2Length = withdrawalsL2Length = defiInteractionLength = defiBridgeProcessedStructsLength = 0;
     }
 
     /**
