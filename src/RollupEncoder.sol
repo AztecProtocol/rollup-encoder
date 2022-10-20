@@ -11,32 +11,16 @@ import {RollupProcessorLibrary} from "./libraries/RollupProcessorLibrary.sol";
  * @notice A contract which allows testing bridges against live RollupProcessor deployment.
  * @author Lasse Herskind, Jan Benes
  * @dev Inheriting from Script in order to have access to `vm`
+ * @dev This contract allows for testing of bridges and RollupProcessor itself. The external functions can be used
+ *      to register L2 transactions which are then passed to RollupProcessor in a rollup block when `processRollup()`
+ *      function or some of its variations is called. After rollup block is processed the L2 transactions are wiped
+ *      from this contract and the next block starts from a clean slate.
  */
 contract RollupEncoder is Script {
     /* solhint-enable error-name-mixedcase */
     error UnsupportedAsset(address);
 
-    // error lib errors
-    error InvalidCaller();
-    error InputAssetAAndOutputAssetAIsEth();
-    error InputAssetANotERC20OrEth();
-    error OutputAssetANotERC20OrEth();
-    error InputAssetBNotEmpty();
-    error OutputAssetBNotEmpty();
-    error InputAssetInvalid();
-    error OutputAssetInvalid();
-    error InputAssetNotEqZkAToken();
-    error InvalidAToken();
-    error ZkTokenAlreadyExists();
-    error ZkTokenDontExist();
-    error ZeroValue();
-    error AsyncDisabled();
-
-    /*----------------------------------------
-    EVENTS
-    ----------------------------------------*/
-    event OffchainData(uint256 indexed rollupId, uint256 chunk, uint256 totalChunks, address sender);
-    event RollupProcessed(uint256 indexed rollupId, bytes32[] nextExpectedDefiHashes, address sender);
+    // Following 2 events were copied from RollupProcessor
     event DefiBridgeProcessed(
         uint256 indexed encodedBridgeCallData,
         uint256 indexed nonce,
@@ -49,18 +33,8 @@ contract RollupEncoder is Script {
     event AsyncDefiBridgeProcessed(
         uint256 indexed encodedBridgeCallData, uint256 indexed nonce, uint256 totalInputValue
     );
-    event Deposit(uint256 indexed assetId, address indexed depositorAddress, uint256 depositValue);
-    event WithdrawError(bytes errorReason);
-    event AssetAdded(uint256 indexed assetId, address indexed assetAddress, uint256 assetGasLimit);
-    event BridgeAdded(uint256 indexed bridgeAddressId, address indexed bridgeAddress, uint256 bridgeGasLimit);
-    event RollupProviderUpdated(address indexed providerAddress, bool valid);
-    event VerifierUpdated(address indexed verifierAddress);
-    event Paused(address account);
-    event Unpaused(address account);
-    event DelayBeforeEscapeHatchUpdated(uint32 delay);
-    event AssetCapUpdated(uint256 assetId, uint256 pendingCap, uint256 dailyCap);
-    event CappedUpdated(bool isCapped);
 
+    // @dev An enum describing proof/L2 tx type
     enum ProofId {
         PADDING,
         DEPOSIT,
@@ -71,43 +45,72 @@ contract RollupEncoder is Script {
         DEFI_CLAIM
     }
 
-    struct OffchainDataStruct {
-        bytes32 viewing1;
-        bytes32 viewing2;
-    }
-
+    /**
+     * @dev A container for deposit related information
+     * @param assetId An id of the deposited asset
+     * @param amount An amount of the deposited asset
+     * @param fee An amount of the deposited asset to be paid as a fee
+     * @param privKey A private key of the deposit owner (address is automatically derived and set as deposit owner)
+     * @param proofHash keccak256 hash of the inner proof public inputs (allows the owner to prove deposit ownership
+     *                  on L2)
+     * @dev For testing we assume fee is paid in the same asset as the deposit
+     */
     struct DepositStruct {
         uint256 assetId;
         uint256 amount;
         uint256 fee; // Just assume it is the same asset
         uint256 privKey;
-        bytes32 digest;
+        bytes32 proofHash;
     }
 
+    /**
+     * @dev A container for withdraw related information
+     * @param assetId An id of the asset to withdraw
+     * @param amount An amount of the asset to withdraw
+     * @param publicOwner A recipient of the withdrawal on L1
+     */
     struct WithdrawStruct {
         uint256 assetId;
         uint256 amount;
         address publicOwner;
     }
 
+    /**
+     * @dev A container for withdraw related information
+     * @param bridgeCallData A bit-array that contains data describing a specific bridge call
+     * @param totalInputValue An amount of used input assets to be passed to a bridge before bridge call
+     */
     struct DefiInteractionStruct {
         uint256 bridgeCallData;
-        uint256 inputValue;
+        uint256 totalInputValue;
     }
 
+    /**
+     * @dev A container for information which is expected to be emitted in a `DefiBridgeProcessed` event once
+     *      `processRollup()` is called.
+     * @param bridgeCallData A bit-array that contains data describing a specific bridge call
+     * @param nonce A nonce of the bridge interaction
+     * @param totalInputValue An amount of used input assets to be passed to a bridge before bridge call
+     * @param outputValueA An amount of output asset A returned from the interaction
+     * @param outputValueB An amount of output asset B returned from the interaction (0 if asset B unused)
+     * @param result A flag indicating whether the interaction succeeded
+     * @param errorReason Error reason (empty if result = true)
+     */
     struct DefiBridgeProcessedStruct {
         uint256 bridgeCallData;
         uint256 nonce;
         uint256 totalInputValue;
-        uint256 totalOutputValueA;
-        uint256 totalOutputValueB;
+        uint256 outputValueA;
+        uint256 outputValueB;
         bool result;
         bytes errorReason;
     }
 
+    // Constants copied from RollupProcessor and Decoder
+
     // Note: Called NUMBER_OF_ASSETS in Decoder - calling it differently here to avoid collisions in tests which
     //       inherit from Decoder.
-    uint256 internal constant MAX_ASSETS_IN_BLOCK = 16;
+    uint256 internal constant NUMBER_OF_ASSETS = 16;
 
     uint256 private constant INPUT_ASSET_ID_A_SHIFT = 32;
     uint256 private constant INPUT_ASSET_ID_B_SHIFT = 62;
@@ -175,13 +178,13 @@ contract RollupEncoder is Script {
         uint256 bridgeCallData,
         uint256 nonce,
         uint256 totalInputValue,
-        uint256 totalOutputValueA,
-        uint256 totalOutputValueB,
+        uint256 outputValueA,
+        uint256 outputValueB,
         bool result,
         bytes memory errorReason
     ) external {
         defiBridgeProcessedStructs[defiBridgeProcessedStructsLength++] = DefiBridgeProcessedStruct(
-            bridgeCallData, nonce, totalInputValue, totalOutputValueA, totalOutputValueB, result, errorReason
+            bridgeCallData, nonce, totalInputValue, outputValueA, outputValueB, result, errorReason
         );
     }
 
@@ -201,8 +204,8 @@ contract RollupEncoder is Script {
                 temp.bridgeCallData,
                 temp.nonce,
                 temp.totalInputValue,
-                temp.totalOutputValueA,
-                temp.totalOutputValueB,
+                temp.outputValueA,
+                temp.outputValueB,
                 temp.result,
                 temp.errorReason
                 );
@@ -272,11 +275,11 @@ contract RollupEncoder is Script {
      */
     function depositL2(uint256 _assetId, uint256 _amount, uint256 _fee, uint256 _privKey) external {
         depositsL2[depositsL2Length++] =
-            DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, digest: bytes32("")});
+            DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, proofHash: bytes32("")});
 
         if (_fee > 0) {
             require(
-                _assetId < MAX_ASSETS_IN_BLOCK, "Functionality handling assetId >= MAX_ASSETS_IN_BLOCK not implemented"
+                _assetId < NUMBER_OF_ASSETS, "Functionality handling assetId >= MAX_ASSETS_IN_BLOCK not implemented"
             );
             fees[_assetId] += _fee;
         }
@@ -286,10 +289,10 @@ contract RollupEncoder is Script {
         external
     {
         depositsL2[depositsL2Length++] =
-            DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, digest: _proofHash});
+            DepositStruct({assetId: _assetId, amount: _amount, fee: _fee, privKey: _privKey, proofHash: _proofHash});
         if (_fee > 0) {
             require(
-                _assetId < MAX_ASSETS_IN_BLOCK, "Functionality handling assetId >= MAX_ASSETS_IN_BLOCK not implemented"
+                _assetId < NUMBER_OF_ASSETS, "Functionality handling assetId >= MAX_ASSETS_IN_BLOCK not implemented"
             );
             fees[_assetId] += _fee;
         }
@@ -328,7 +331,7 @@ contract RollupEncoder is Script {
         uint256 encodedBridgeCallData =
             encodeBridgeCallData(_bridgeAddressId, _inputAssetA, _inputAssetB, _outputAssetA, _outputAssetB, _auxData);
         defiInteractionsL2[defiInteractionLength++] =
-            DefiInteractionStruct({bridgeCallData: encodedBridgeCallData, inputValue: _totalInputValue});
+            DefiInteractionStruct({bridgeCallData: encodedBridgeCallData, totalInputValue: _totalInputValue});
         return encodedBridgeCallData;
     }
 
@@ -339,7 +342,7 @@ contract RollupEncoder is Script {
      */
     function defiInteractionL2(uint256 _encodedBridgeCallData, uint256 _totalInputValue) external {
         defiInteractionsL2[defiInteractionLength++] =
-            DefiInteractionStruct({bridgeCallData: _encodedBridgeCallData, inputValue: _totalInputValue});
+            DefiInteractionStruct({bridgeCallData: _encodedBridgeCallData, totalInputValue: _totalInputValue});
     }
 
     /**
@@ -552,16 +555,16 @@ contract RollupEncoder is Script {
             DefiInteractionStruct storage interaction = defiInteractionsL2[i];
             if (interaction.bridgeCallData != 0) {
                 uint256 bridgeCallData = interaction.bridgeCallData;
-                uint256 inputValue = interaction.inputValue;
+                uint256 totalInputValue = interaction.totalInputValue;
                 assembly {
                     mstore(add(pd, add(0x20, mul(0x20, add(11, i)))), bridgeCallData)
-                    mstore(add(pd, add(0x20, mul(0x20, add(43, i)))), inputValue)
+                    mstore(add(pd, add(0x20, mul(0x20, add(43, i)))), totalInputValue)
                 }
             }
         }
 
         // Fees
-        for (uint256 assetId = 0; assetId < MAX_ASSETS_IN_BLOCK; assetId++) {
+        for (uint256 assetId = 0; assetId < NUMBER_OF_ASSETS; assetId++) {
             uint256 feeAmount = fees[assetId];
             if (feeAmount > 0) {
                 assembly {
@@ -735,7 +738,7 @@ contract RollupEncoder is Script {
             mstore(add(_encodedProofData, add(_encodedProofLocation, 0xa0)), mload(add(encoded, 0xc0)))
         }
 
-        if (deposit_.digest != bytes32("")) {
+        if (deposit_.proofHash != bytes32("")) {
             delete depositsL2[id];
             return (_encodedProofLocation + 0xb9, _sigIndex);
         }
@@ -751,8 +754,8 @@ contract RollupEncoder is Script {
             bytes32(deposit_.assetId)
         );
 
-        bytes32 digest = keccak256(full);
-        bytes32 hashedMessage = RollupProcessorLibrary.getSignedMessageForTxId(digest);
+        bytes32 proofHash = keccak256(full);
+        bytes32 hashedMessage = RollupProcessorLibrary.getSignedMessageForTxId(proofHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(deposit_.privKey, hashedMessage);
 
         assembly {
