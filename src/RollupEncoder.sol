@@ -118,7 +118,7 @@ contract RollupEncoder is Script {
     uint256 private constant OUTPUT_ASSET_ID_B_SHIFT = 122;
     uint256 private constant BITCONFIG_SHIFT = 152;
     uint256 private constant AUX_DATA_SHIFT = 184;
-    uint256 internal constant VIRTUAL_ASSET_ID_FLAG_SHIFT = 29;
+    uint256 public constant VIRTUAL_ASSET_ID_FLAG_SHIFT = 29;
     uint256 internal constant VIRTUAL_ASSET_ID_FLAG = 0x20000000; // 2 ** 29
     uint256 private constant MASK_THIRTY_TWO_BITS = 0xffffffff;
     uint256 private constant MASK_THIRTY_BITS = 0x3fffffff;
@@ -383,6 +383,15 @@ contract RollupEncoder is Script {
      */
     function setMockVerifierCall(bool _mockVerifierCall) external {
         mockVerifierCall = _mockVerifierCall;
+    }
+
+    /**
+     * @notice Sets `nextRollupId` storage variable
+     * @param _nextRollupId Next rollupId
+     * @dev Used only in RollupProcessor tests (DefiBridge.t.sol). Does not need to be touched when developing bridges.
+     */
+    function setNextRollupId(uint256 _nextRollupId) external {
+        nextRollupId = _nextRollupId;
     }
 
     /**
