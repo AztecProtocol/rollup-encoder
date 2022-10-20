@@ -107,10 +107,7 @@ contract RollupEncoder is Script {
     }
 
     // Constants copied from RollupProcessor and Decoder
-
-    // Note: Called NUMBER_OF_ASSETS in Decoder - calling it differently here to avoid collisions in tests which
-    //       inherit from Decoder.
-    uint256 internal constant NUMBER_OF_ASSETS = 16;
+    uint256 public constant NUMBER_OF_ASSETS = 16;
 
     uint256 private constant INPUT_ASSET_ID_A_SHIFT = 32;
     uint256 private constant INPUT_ASSET_ID_B_SHIFT = 62;
@@ -119,7 +116,7 @@ contract RollupEncoder is Script {
     uint256 private constant BITCONFIG_SHIFT = 152;
     uint256 private constant AUX_DATA_SHIFT = 184;
     uint256 public constant VIRTUAL_ASSET_ID_FLAG_SHIFT = 29;
-    uint256 internal constant VIRTUAL_ASSET_ID_FLAG = 0x20000000; // 2 ** 29
+    uint256 public constant VIRTUAL_ASSET_ID_FLAG = 0x20000000; // 2 ** 29
     uint256 private constant MASK_THIRTY_TWO_BITS = 0xffffffff;
     uint256 private constant MASK_THIRTY_BITS = 0x3fffffff;
     uint256 private constant MASK_SIXTY_FOUR_BITS = 0xffffffffffffffff;
@@ -139,7 +136,7 @@ contract RollupEncoder is Script {
     uint256 private constant NUM_ASYNC_DEFI_INTERACTION_HASHES_MASK =
         type(uint256).max - (uint256(type(uint16).max) << 192);
 
-    address internal constant ROLLUP_PROVIDER = payable(0xA173BDdF4953C1E8be2cA0695CFc07502Ff3B1e7);
+    address public constant ROLLUP_PROVIDER = payable(0xA173BDdF4953C1E8be2cA0695CFc07502Ff3B1e7);
 
     bytes32 public constant BRIDGE_PROCESSED_EVENT_SIG =
         keccak256("DefiBridgeProcessed(uint256,uint256,uint256,uint256,uint256,bool,bytes)");
