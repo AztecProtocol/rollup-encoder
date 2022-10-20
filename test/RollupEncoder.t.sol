@@ -68,7 +68,7 @@ contract RollupEncoderTest is RollupEncoder, Test {
         address beneficiary = 0x508383c4cbD351dC2d4F632C65Ee9d2BC79612EC;
         this.setRollupBeneficiary(beneficiary);
         this.defiInteractionL2(5, emptyAsset, emptyAsset, emptyAsset, emptyAsset, 0, 0);
-        (bytes memory encodedProofData, bytes memory signatures) = _computeRollup();
+        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
         address decodedBeneficiary = _extractRollupBeneficiary(encodedProofData);
         assertEq(decodedBeneficiary, beneficiary, "Decoded address does not match");
     }
