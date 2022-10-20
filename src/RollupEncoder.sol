@@ -206,7 +206,7 @@ contract RollupEncoder is Script {
      * @dev Checks DefiBridgeProcessed events if registered via `registerEventToBeChecked(...)`
      */
     function processRollup() external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = prepProcessorAndGetRollupBlock();
 
         for (uint256 i = 0; i < defiBridgeProcessedStructsLength; i++) {
             DefiBridgeProcessedStruct memory temp = defiBridgeProcessedStructs[i];
@@ -234,7 +234,7 @@ contract RollupEncoder is Script {
      * @param _err An error with which RollupProcessor's `processRollup(...)` function is expected to revert
      */
     function processRollupFail(bytes memory _err) external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = prepProcessorAndGetRollupBlock();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
         ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
@@ -249,7 +249,7 @@ contract RollupEncoder is Script {
      *             revert
      */
     function processRollupFail(bytes4 _err) external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = prepProcessorAndGetRollupBlock();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
         ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
@@ -268,7 +268,7 @@ contract RollupEncoder is Script {
         external
         returns (uint256 outputValueA, uint256 outputValueB, bool isAsync)
     {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = prepProcessorAndGetRollupBlock();
 
         vm.recordLogs();
         vm.prank(ROLLUP_PROVIDER);
@@ -486,69 +486,13 @@ contract RollupEncoder is Script {
     }
 
     /**
-     * @notice Gets the id a given `_asset`
-     * @dev if `_asset` is not supported will revert with `UnsupportedAsset(_asset)`
-     * @param _asset The address of the asset to fetch id for
-     * @return The id matching `_asset`
-     */
-    function getAssetId(address _asset) public view returns (uint256) {
-        if (_asset == address(0)) {
-            return 0;
-        }
-        uint256 length = ROLLUP_PROCESSOR.getSupportedAssetsLength();
-        for (uint256 i = 1; i <= length; i++) {
-            address fetched = ROLLUP_PROCESSOR.getSupportedAsset(i);
-            if (fetched == _asset) {
-                return i;
-            }
-        }
-        revert UnsupportedAsset(_asset);
-    }
-
-    /**
-     * @notice Encodes bridge call data into a bit-string
-     * @dev For more info see the rollup implementation at "rollup.aztec.eth" that decodes
-     * @param _bridgeAddressId id of the specific bridge (index in supportedBridge + 1)
-     * @param _inputAssetA The first input asset
-     * @param _inputAssetB The second input asset
-     * @param _outputAssetA The first output asset
-     * @param _outputAssetB The second output asset
-     * @param _auxData Auxiliary data that is passed to the bridge
-     * @return encodedBridgeCallData - The encoded bitmap containing encoded information about the call
-     */
-    function encodeBridgeCallData(
-        uint256 _bridgeAddressId,
-        AztecTypes.AztecAsset memory _inputAssetA,
-        AztecTypes.AztecAsset memory _inputAssetB,
-        AztecTypes.AztecAsset memory _outputAssetA,
-        AztecTypes.AztecAsset memory _outputAssetB,
-        uint256 _auxData
-    ) public pure returns (uint256 encodedBridgeCallData) {
-        encodedBridgeCallData = _bridgeAddressId & MASK_THIRTY_TWO_BITS;
-
-        // Input assets
-        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_inputAssetA) << INPUT_ASSET_ID_A_SHIFT);
-        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_inputAssetB) << INPUT_ASSET_ID_B_SHIFT);
-        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_outputAssetA) << OUTPUT_ASSET_ID_A_SHIFT);
-        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_outputAssetB) << OUTPUT_ASSET_ID_B_SHIFT);
-
-        // Aux data
-        encodedBridgeCallData = encodedBridgeCallData | ((_auxData & MASK_SIXTY_FOUR_BITS) << AUX_DATA_SHIFT);
-
-        // bit config
-        uint256 bitConfig = (_inputAssetB.assetType != AztecTypes.AztecAssetType.NOT_USED ? 1 : 0)
-            | (_outputAssetB.assetType != AztecTypes.AztecAssetType.NOT_USED ? 2 : 0);
-        encodedBridgeCallData = encodedBridgeCallData | (bitConfig << BITCONFIG_SHIFT);
-    }
-
-    /**
      * @notice Prepares rollup processor state for rollup block, computes rollup block and cleans this contract state
      *         so that next rollup block starts with a clean slate
      * @dev Rollup block consists of proof data and signatures
      * @return proofData Proof data
      * @return signatures Signatures corresponding to the proof data
      */
-    function _setStateAndGetRollupBlock() internal returns (bytes memory proofData, bytes memory signatures) {
+    function prepProcessorAndGetRollupBlock() public returns (bytes memory proofData, bytes memory signatures) {
         _prepRollupProcessorState();
 
         // TODO make the size computation here precise and dynamic
@@ -683,6 +627,62 @@ contract RollupEncoder is Script {
 
         // Reset "array" lengths
         depositsL2Length = withdrawalsL2Length = defiInteractionLength = defiBridgeProcessedStructsLength = 0;
+    }
+
+    /**
+     * @notice Gets the id a given `_asset`
+     * @dev if `_asset` is not supported will revert with `UnsupportedAsset(_asset)`
+     * @param _asset The address of the asset to fetch id for
+     * @return The id matching `_asset`
+     */
+    function getAssetId(address _asset) public view returns (uint256) {
+        if (_asset == address(0)) {
+            return 0;
+        }
+        uint256 length = ROLLUP_PROCESSOR.getSupportedAssetsLength();
+        for (uint256 i = 1; i <= length; i++) {
+            address fetched = ROLLUP_PROCESSOR.getSupportedAsset(i);
+            if (fetched == _asset) {
+                return i;
+            }
+        }
+        revert UnsupportedAsset(_asset);
+    }
+
+    /**
+     * @notice Encodes bridge call data into a bit-string
+     * @dev For more info see the rollup implementation at "rollup.aztec.eth" that decodes
+     * @param _bridgeAddressId id of the specific bridge (index in supportedBridge + 1)
+     * @param _inputAssetA The first input asset
+     * @param _inputAssetB The second input asset
+     * @param _outputAssetA The first output asset
+     * @param _outputAssetB The second output asset
+     * @param _auxData Auxiliary data that is passed to the bridge
+     * @return encodedBridgeCallData - The encoded bitmap containing encoded information about the call
+     */
+    function encodeBridgeCallData(
+        uint256 _bridgeAddressId,
+        AztecTypes.AztecAsset memory _inputAssetA,
+        AztecTypes.AztecAsset memory _inputAssetB,
+        AztecTypes.AztecAsset memory _outputAssetA,
+        AztecTypes.AztecAsset memory _outputAssetB,
+        uint256 _auxData
+    ) public pure returns (uint256 encodedBridgeCallData) {
+        encodedBridgeCallData = _bridgeAddressId & MASK_THIRTY_TWO_BITS;
+
+        // Input assets
+        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_inputAssetA) << INPUT_ASSET_ID_A_SHIFT);
+        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_inputAssetB) << INPUT_ASSET_ID_B_SHIFT);
+        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_outputAssetA) << OUTPUT_ASSET_ID_A_SHIFT);
+        encodedBridgeCallData = encodedBridgeCallData | (_encodeAsset(_outputAssetB) << OUTPUT_ASSET_ID_B_SHIFT);
+
+        // Aux data
+        encodedBridgeCallData = encodedBridgeCallData | ((_auxData & MASK_SIXTY_FOUR_BITS) << AUX_DATA_SHIFT);
+
+        // bit config
+        uint256 bitConfig = (_inputAssetB.assetType != AztecTypes.AztecAssetType.NOT_USED ? 1 : 0)
+            | (_outputAssetB.assetType != AztecTypes.AztecAssetType.NOT_USED ? 2 : 0);
+        encodedBridgeCallData = encodedBridgeCallData | (bitConfig << BITCONFIG_SHIFT);
     }
 
     /**
