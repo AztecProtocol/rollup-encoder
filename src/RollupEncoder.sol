@@ -206,7 +206,7 @@ contract RollupEncoder is Script {
      * @dev Checks DefiBridgeProcessed events if registered via `registerEventToBeChecked(...)`
      */
     function processRollup() external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
 
         for (uint256 i = 0; i < defiBridgeProcessedStructsLength; i++) {
             DefiBridgeProcessedStruct memory temp = defiBridgeProcessedStructs[i];
@@ -234,7 +234,7 @@ contract RollupEncoder is Script {
      * @param _err An error with which RollupProcessor's `processRollup(...)` function is expected to revert
      */
     function processRollupFail(bytes memory _err) external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
         ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
@@ -249,7 +249,7 @@ contract RollupEncoder is Script {
      *             revert
      */
     function processRollupFail(bytes4 _err) external {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
         vm.prank(ROLLUP_PROVIDER);
         vm.expectRevert(_err);
         ROLLUP_PROCESSOR.processRollup(encodedProofData, signatures);
@@ -268,7 +268,7 @@ contract RollupEncoder is Script {
         external
         returns (uint256 outputValueA, uint256 outputValueB, bool isAsync)
     {
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
+        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndGetRollupBlock();
 
         vm.recordLogs();
         vm.prank(ROLLUP_PROVIDER);
@@ -544,14 +544,15 @@ contract RollupEncoder is Script {
     /**
      * @notice Prepares rollup processor state for rollup block, computes rollup block and cleans this contract state
      *         so that next rollup block starts with a clean slate
-     * @return pd Proof data
+     * @dev Rollup block consists of proof data and signatures
+     * @return proofData Proof data
      * @return signatures Signatures corresponding to the proof data
      */
-    function _setStateAndComputeRollupBlock() internal returns (bytes memory pd, bytes memory signatures) {
+    function _setStateAndGetRollupBlock() internal returns (bytes memory proofData, bytes memory signatures) {
         _prepRollupProcessorState();
 
         // TODO make the size computation here precise and dynamic
-        pd = new bytes(256 * 64);
+        proofData = new bytes(256 * 64);
         signatures = new bytes(0x20 + 0x60 * depositsL2Length);
 
         uint256 numRealTxs = depositsL2Length + withdrawalsL2Length + defiInteractionLength;
@@ -565,17 +566,17 @@ contract RollupEncoder is Script {
                 (dataSize % numDataLeaves == 0) ? dataSize : (dataSize + numDataLeaves - (dataSize % numDataLeaves));
 
             assembly {
-                mstore(add(pd, add(0x20, mul(0x20, 0))), _nextRollupId)
-                // mstore(add(pd, add(0x20, mul(0x20, 1))), size)
-                mstore(add(pd, add(0x20, mul(0x20, 2))), newDataStartIndex)
-                mstore(add(pd, add(0x20, mul(0x20, 3))), DATA_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 4))), DATA_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 5))), NULL_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 6))), NULL_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 7))), DATA_ROOTS_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 8))), DATA_ROOTS_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 9))), DEFI_ROOT)
-                mstore(add(pd, add(0x20, mul(0x20, 10))), DEFI_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 0))), _nextRollupId)
+                // mstore(add(proofData, add(0x20, mul(0x20, 1))), size)
+                mstore(add(proofData, add(0x20, mul(0x20, 2))), newDataStartIndex)
+                mstore(add(proofData, add(0x20, mul(0x20, 3))), DATA_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 4))), DATA_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 5))), NULL_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 6))), NULL_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 7))), DATA_ROOTS_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 8))), DATA_ROOTS_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 9))), DEFI_ROOT)
+                mstore(add(proofData, add(0x20, mul(0x20, 10))), DEFI_ROOT)
             }
         }
 
@@ -586,8 +587,8 @@ contract RollupEncoder is Script {
                 uint256 encodedBridgeCallData = interaction.encodedBridgeCallData;
                 uint256 totalInputValue = interaction.totalInputValue;
                 assembly {
-                    mstore(add(pd, add(0x20, mul(0x20, add(11, i)))), encodedBridgeCallData)
-                    mstore(add(pd, add(0x20, mul(0x20, add(43, i)))), totalInputValue)
+                    mstore(add(proofData, add(0x20, mul(0x20, add(11, i)))), encodedBridgeCallData)
+                    mstore(add(proofData, add(0x20, mul(0x20, add(43, i)))), totalInputValue)
                 }
             }
         }
@@ -597,13 +598,13 @@ contract RollupEncoder is Script {
             uint256 feeAmount = fees[assetId];
             if (feeAmount > 0) {
                 assembly {
-                    mstore(add(pd, add(0x20, mul(0x20, add(75, assetId)))), assetId)
-                    mstore(add(pd, add(0x20, mul(0x20, add(91, assetId)))), feeAmount)
+                    mstore(add(proofData, add(0x20, mul(0x20, add(75, assetId)))), assetId)
+                    mstore(add(proofData, add(0x20, mul(0x20, add(91, assetId)))), feeAmount)
                 }
                 delete fees[assetId];
             } else {
                 assembly {
-                    mstore(add(pd, add(0x20, mul(0x20, add(75, assetId)))), 0x40000000)
+                    mstore(add(proofData, add(0x20, mul(0x20, add(75, assetId)))), 0x40000000)
                 }
             }
         }
@@ -618,18 +619,18 @@ contract RollupEncoder is Script {
                     {
                         bytes32 hash = ROLLUP_PROCESSOR.defiInteractionHashes(offset + i);
                         assembly {
-                            mstore(add(pd, add(0x20, mul(0x20, add(107, i)))), hash)
+                            mstore(add(proofData, add(0x20, mul(0x20, add(107, i)))), hash)
                         }
                     }
                 } else {
                     assembly {
-                        mstore(add(pd, add(0x20, mul(0x20, add(107, i)))), DEFI_RESULT_ZERO_HASH)
+                        mstore(add(proofData, add(0x20, mul(0x20, add(107, i)))), DEFI_RESULT_ZERO_HASH)
                     }
                 }
             }
             bytes32 prevDefiInteractionsHash;
             assembly {
-                let hashData := add(pd, add(0x20, mul(0x20, 107)))
+                let hashData := add(proofData, add(0x20, mul(0x20, 107)))
                 pop(staticcall(gas(), 0x2, hashData, 1024, 0x00, 0x20))
                 prevDefiInteractionsHash := mod(mload(0x00), CIRCUIT_MODULUS)
             }
@@ -640,8 +641,8 @@ contract RollupEncoder is Script {
             bytes32 prev = ROLLUP_PROCESSOR.prevDefiInteractionsHash();
             address rollupBeneficiaryUnpacked = rollupBeneficiary;
             assembly {
-                mstore(add(pd, add(0x20, mul(0x20, 139))), prev)
-                mstore(add(pd, add(0x20, mul(0x20, 140))), rollupBeneficiaryUnpacked)
+                mstore(add(proofData, add(0x20, mul(0x20, 139))), prev)
+                mstore(add(proofData, add(0x20, mul(0x20, 140))), rollupBeneficiaryUnpacked)
             }
         }
 
@@ -649,25 +650,25 @@ contract RollupEncoder is Script {
         uint256 proofLoc = 0x20 + 0x11c8;
         uint256 sigIndex = 0x20;
         for (uint256 i = 0; i < defiInteractionLength; i++) {
-            proofLoc = _addDefiTx(pd, proofLoc, i);
+            proofLoc = _addDefiTx(proofData, proofLoc, i);
         }
         for (uint256 i = 0; i < depositsL2Length; i++) {
-            (proofLoc, sigIndex) = _addDepositTx(pd, proofLoc, signatures, sigIndex, i);
+            (proofLoc, sigIndex) = _addDepositTx(proofData, proofLoc, signatures, sigIndex, i);
         }
         for (uint256 i = 0; i < withdrawalsL2Length; i++) {
-            proofLoc = _addWithdrawTx(pd, proofLoc, i);
+            proofLoc = _addWithdrawTx(proofData, proofLoc, i);
         }
 
         {
             uint256 length = proofLoc - (0x20 + 0x11c8);
             assembly {
-                mstore(add(pd, add(0x20, mul(0x20, 141))), numRealTxs)
-                mstore(add(pd, add(0x20, mul(0x20, 1))), numRealTxs)
-                let pre := mload(add(pd, add(0x20, 0x11c0)))
+                mstore(add(proofData, add(0x20, mul(0x20, 141))), numRealTxs)
+                mstore(add(proofData, add(0x20, mul(0x20, 1))), numRealTxs)
+                let pre := mload(add(proofData, add(0x20, 0x11c0)))
                 let txCount := shl(224, numRealTxs)
                 let encodedTxDataLength := shl(192, length)
                 let after := or(pre, or(encodedTxDataLength, txCount))
-                mstore(add(pd, add(0x20, 0x11c0)), after)
+                mstore(add(proofData, add(0x20, 0x11c0)), after)
             }
         }
 
@@ -675,7 +676,7 @@ contract RollupEncoder is Script {
             uint256 proofSize = proofLoc - 0x20;
             uint256 sigSize = sigIndex - 0x20;
             assembly {
-                mstore(pd, proofSize)
+                mstore(proofData, proofSize)
                 mstore(signatures, sigSize)
             }
         }

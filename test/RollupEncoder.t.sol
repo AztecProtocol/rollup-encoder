@@ -68,9 +68,42 @@ contract RollupEncoderTest is RollupEncoder, Test {
         address beneficiary = 0x508383c4cbD351dC2d4F632C65Ee9d2BC79612EC;
         this.setRollupBeneficiary(beneficiary);
         this.defiInteractionL2(5, emptyAsset, emptyAsset, emptyAsset, emptyAsset, 0, 0);
-        (bytes memory encodedProofData, bytes memory signatures) = _setStateAndComputeRollupBlock();
+        (bytes memory encodedProofData,) = _setStateAndGetRollupBlock();
         address decodedBeneficiary = _extractRollupBeneficiary(encodedProofData);
         assertEq(decodedBeneficiary, beneficiary, "Decoded address does not match");
+    }
+
+    function testMiniDeposit() public {
+        uint256 user1Priv = 123123123;
+        address user1 = vm.addr(user1Priv);
+        address user2 = address(0xdead);
+        emit log_named_address("user ", user1);
+        vm.deal(user1, 2 ether);
+        vm.deal(user2, 0);
+
+        emit log_named_decimal_uint("Balance R", address(ROLLUP_PROCESSOR).balance, 18);
+        emit log_named_decimal_uint("Balance U", user2.balance, 18);
+
+        vm.prank(user1);
+        ROLLUP_PROCESSOR.depositPendingFunds{value: 2 ether}(0, 2 ether, user1, bytes32(""));
+
+        emit log_named_uint("pending", ROLLUP_PROCESSOR.userPendingDeposits(0, user1));
+        this.depositL2(0, 1 ether, 0, user1Priv);
+
+        this.withdrawL2(0, 5 ether, user2);
+
+        this.processRollup();
+
+        emit log_named_uint("pending", ROLLUP_PROCESSOR.userPendingDeposits(0, user1));
+        emit log_named_decimal_uint("Balance R", address(ROLLUP_PROCESSOR).balance, 18);
+        emit log_named_decimal_uint("Balance U", user2.balance, 18);
+
+        this.withdrawL2(0, 5 ether, user2);
+        this.processRollup();
+
+        emit log_named_uint("pending", ROLLUP_PROCESSOR.userPendingDeposits(0, user1));
+        emit log_named_decimal_uint("Balance R", address(ROLLUP_PROCESSOR).balance, 18);
+        emit log_named_decimal_uint("Balance U", user2.balance, 18);
     }
 
     function _decodeAsset(uint256 _assetId) internal view returns (AztecTypes.AztecAsset memory) {
