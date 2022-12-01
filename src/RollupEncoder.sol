@@ -3,6 +3,7 @@
 pragma solidity >=0.8.4;
 
 import {Vm} from "forge-std/Vm.sol";
+import {EventsErrorsV2} from "./libraries/EventsErrorsV2.sol";
 import {Script} from "forge-std/Script.sol";
 import {IRollupProcessorV2} from "./interfaces/IRollupProcessorV2.sol";
 import {AztecTypes} from "./libraries/AztecTypes.sol";
@@ -17,23 +18,9 @@ import {RollupProcessorLibrary} from "./libraries/RollupProcessorLibrary.sol";
  *      function or some of its variations is called. After rollup block is processed the L2 transactions are wiped
  *      from this contract and the next block starts from a clean slate.
  */
-contract RollupEncoder is Script {
+contract RollupEncoder is Script, EventsErrorsV2 {
     /* solhint-enable error-name-mixedcase */
     error UnsupportedAsset(address);
-
-    // Following 2 events were copied from RollupProcessor
-    event DefiBridgeProcessed(
-        uint256 indexed encodedBridgeCallData,
-        uint256 indexed nonce,
-        uint256 totalInputValue,
-        uint256 totalOutputValueA,
-        uint256 totalOutputValueB,
-        bool result,
-        bytes errorReason
-    );
-    event AsyncDefiBridgeProcessed(
-        uint256 indexed encodedBridgeCallData, uint256 indexed nonce, uint256 totalInputValue
-    );
 
     // @dev An enum describing proof/L2 tx type
     enum ProofId {
